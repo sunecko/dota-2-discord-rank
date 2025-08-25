@@ -142,7 +142,7 @@ def create_discord_message(players_data):
     
     # Embed principal con el ranking top 3
     top_embed = {
-        "title": "🏆 TOP 3 - Ranking SecretForce",
+        "title": "🏆 TOP 3 - Ranking Secret Force",
         "color": 15844367,  # Oro
         "thumbnail": {"url": "https://riki.dotabuff.com/t/l/12wFjEZJmK.png"},
         "description": "",
