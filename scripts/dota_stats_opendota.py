@@ -24,7 +24,7 @@ PLAYERS = {
     '1445816492': 'Chipi', 
     '1472886971': 'Win',
     '1427092031': 'Nagato',
-    '1342290983': 'Miguelo',
+    '1342282183': 'Miguelo',
     '1476275421': 'Godynt',
     '1060683927': 'Jorge',
     '1846249016': 'Reime',
@@ -151,7 +151,7 @@ def create_discord_message(players_data):
     }
     
     # Emojis para cada posición
-    position_emojis = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣"]
+    position_emojis = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "💩"]
     
     # Top 3 en el embed principal
     for i, player in enumerate(players_data[:3]):
