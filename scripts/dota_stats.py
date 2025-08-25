@@ -26,24 +26,20 @@ STEAM64_IDS = {
     "sunecko": 76561198873989123
 }
 
-def steam64_to_steam32(s64):
-    """Convierte Steam64 a Steam32 (account_id)"""
-    return s64 - 76561197960265728
-
-def get_match_history(steam32):
-    """Obtiene el historial de partidas recientes usando la API Dev"""
+def get_match_history(steam64, limit=20):
+    """Obtiene el historial de partidas recientes usando la API Dev de Steam"""
     url = "https://api.steampowered.com/IDOTA2Match_205790/GetMatchHistory/v1"
-    params = {'key': STEAM_API_KEY, 'account_id': steam32}
+    params = {'key': STEAM_API_KEY, 'account_id': steam64, 'matches_requested': limit}
     try:
         resp = requests.get(url, params=params, timeout=10)
         resp.raise_for_status()
         return resp.json().get('result', {}).get('matches', [])
     except Exception as e:
-        logging.error(f"Error obteniendo historial de {steam32}: {e}")
+        logging.error(f"Error obteniendo historial de {steam64}: {e}")
         return []
 
 def get_match_details(match_id):
-    """Obtiene detalles de la partida para determinar ganador"""
+    """Obtiene detalles de la partida"""
     url = "https://api.steampowered.com/IDOTA2Match_205790/GetMatchDetails/v1"
     params = {'key': STEAM_API_KEY, 'match_id': match_id}
     try:
@@ -54,14 +50,14 @@ def get_match_details(match_id):
         logging.error(f"Error obteniendo detalles de match {match_id}: {e}")
         return {}
 
-def calculate_winrate(steam32, matches, limit=20):
-    """Calcula winrate basado en últimas 'limit' partidas"""
+def calculate_winrate(steam64, matches):
+    """Calcula winrate basado en las partidas obtenidas"""
     wins = 0
-    total = min(len(matches), limit)
-    for match in matches[:limit]:
+    total = len(matches)
+    for match in matches:
         details = get_match_details(match['match_id'])
         players = details.get('players', [])
-        player = next((p for p in players if p['account_id'] == steam32), None)
+        player = next((p for p in players if p['account_id'] == steam64), None)
         if not player:
             continue
         radiant_win = details.get('radiant_win')
@@ -73,7 +69,7 @@ def calculate_winrate(steam32, matches, limit=20):
 
 def create_discord_message(data):
     embed = {
-        "title": "📊 Estadísticas Dota 2 (Dev API)",
+        "title": "📊 Estadísticas Dota 2 (Steam Dev API)",
         "color": 5814783,
         "fields": [],
         "footer": {"text": f"Actualizado {datetime.now().strftime('%Y-%m-%d %H:%M')}"}
@@ -88,17 +84,16 @@ def create_discord_message(data):
     return {"embeds": [embed]}
 
 def main():
-    logging.info("Iniciando obtención de estadísticas de Dota 2 (Dev API)")
+    logging.info("Iniciando obtención de estadísticas de Dota 2 (Steam Dev API)")
     results = {}
     for name, s64 in STEAM64_IDS.items():
         logging.info(f"Procesando {name} ({s64})")
-        steam32 = steam64_to_steam32(s64)
-        matches = get_match_history(steam32)
+        matches = get_match_history(s64)
         if not matches:
             logging.warning(f"No se encontraron partidas para {name}")
             results[name] = {"wins": 0, "total": 0, "winrate": 0}
             continue
-        wins, total, winrate = calculate_winrate(steam32, matches)
+        wins, total, winrate = calculate_winrate(s64, matches)
         results[name] = {"wins": wins, "total": total, "winrate": winrate}
         logging.info(f"{name}: {wins}/{total} victorias ({winrate:.1f}%)")
     
