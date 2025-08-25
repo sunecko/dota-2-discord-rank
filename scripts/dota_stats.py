@@ -21,7 +21,8 @@ PLAYERS = {
     "win": 1168439971,
     "Rayden": 1220652031,
     "chipi": 1166030492,
-    "miguelo": 1122906683
+    "miguelo": 1122906683,
+    "sunecko": 76561198873989123,
 }
 
 # Mapeo de medallas
@@ -128,3 +129,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
