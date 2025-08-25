@@ -23,7 +23,7 @@ PLAYERS = {
     '913723395': 'SuNecko',
     '1445816492': 'Chipi', 
     '472886971': 'Win',
-    '429237631': 'Nagato',
+    '1427092031': 'Nagato',
     '342290983': 'Miguelo',
     '1476275421': 'Godynt',
     '1060683927': 'Jorge',
@@ -120,7 +120,7 @@ def get_medal_value(medal_name):
     return 0
 
 def create_discord_message(players_data):
-    """Crea el mensaje para Discord con ranking y bromas"""
+    """Crea el mensaje para Discord con mejor formato"""
     if not players_data:
         embed = {
             "title": "❌ Error al obtener estadísticas",
@@ -137,10 +137,15 @@ def create_discord_message(players_data):
     last_place = players_data[-1] if players_data else None
     funny_phrase = random.choice(FUNNY_PHRASES) if last_place else ""
     
-    embed = {
-        "title": "🏆 Ranking SecretForce - Dota 2",
-        "color": 10181046,  # Púrpura
+    # Crear múltiples embeds para mejor organización
+    embeds = []
+    
+    # Embed principal con el ranking top 3
+    top_embed = {
+        "title": "🏆 TOP 3 - Ranking SecretForce",
+        "color": 15844367,  # Oro
         "thumbnail": {"url": "https://riki.dotabuff.com/t/l/12wFjEZJmK.png"},
+        "description": "",
         "fields": [],
         "footer": {"text": f"Actualizado el {datetime.now().strftime('%d/%m/%Y %H:%M')}"}
     }
@@ -148,30 +153,52 @@ def create_discord_message(players_data):
     # Emojis para cada posición
     position_emojis = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣"]
     
-    for i, player in enumerate(players_data):
-        emoji = position_emojis[i] if i < len(position_emojis) else "🔹"
-        
-        field_value = f"{emoji} **{player.get('medal', 'No rank')}**\n"
-        field_value += f"📊 **WR:** {player.get('winrate', 0)}%\n"
-        field_value += f"⚔️ **W/L:** {player.get('wins', 0)}/{player.get('losses', 0)}\n"
-        field_value += f"🎯 **Total:** {player.get('total_matches', 0)} partidas"
-        
-        # Mensaje especial para el último lugar
-        if i == len(players_data) - 1:
-            field_value += f"\n\n🎖️ **{funny_phrase}**"
-        
-        embed["fields"].append({
-            "name": f"{player['name']}",
-            "value": field_value,
-            "inline": True
+    # Top 3 en el embed principal
+    for i, player in enumerate(players_data[:3]):
+        emoji = position_emojis[i]
+        top_embed["fields"].append({
+            "name": f"{emoji} {player['name']} - {player.get('medal', 'No rank')}",
+            "value": f"**Winrate:** {player.get('winrate', 0)}% | **W/L:** {player.get('wins', 0)}/{player.get('losses', 0)} | **Partidas:** {player.get('total_matches', 0)}",
+            "inline": False
         })
     
-    # Añadir descripción con el ranking general
-    top_player = players_data[0] if players_data else None
-    if top_player:
-        embed["description"] = f"**{top_player['name']}** lidera el ranking con {top_player.get('medal', 'No rank')} 🏆"
+    embeds.append(top_embed)
     
-    return {"embeds": [embed], "content": "📈 **RANKING SEMANAL SECRETFORCE**\n¡A ver quién sube de medalla esta semana! 🎮"}
+    # Embed para el resto de jugadores
+    if len(players_data) > 3:
+        rest_embed = {
+            "title": "📊 Resto del Equipo",
+            "color": 3447003,  # Azul
+            "fields": [],
+            "footer": {"text": "Siguiente actualización: Mañana a las 18:00"}
+        }
+        
+        for i, player in enumerate(players_data[3:], 4):
+            emoji = position_emojis[i] if i < len(position_emojis) else "🔹"
+            rest_embed["fields"].append({
+                "name": f"{emoji} {player['name']} - {player.get('medal', 'No rank')}",
+                "value": f"**WR:** {player.get('winrate', 0)}% | **W/L:** {player.get('wins', 0)}/{player.get('losses', 0)} | **Total:** {player.get('total_matches', 0)}",
+                "inline": False
+            })
+        
+        embeds.append(rest_embed)
+    
+    # Embed especial para el último lugar
+    if last_place:
+        last_embed = {
+            "title": "😅 Mención Especial",
+            "color": 15105570,  # Rojo/naranja
+            "description": f"**{last_place['name']}** - {funny_phrase}",
+            "fields": [{
+                "name": "🏆 Estadísticas del Campeón",
+                "value": f"**Medalla:** {last_place.get('medal', 'No rank')}\n**Winrate:** {last_place.get('winrate', 0)}%\n**Récord:** {last_place.get('wins', 0)}W - {last_place.get('losses', 0)}L\n**Total:** {last_place.get('total_matches', 0)} partidas",
+                "inline": False
+            }],
+            "footer": {"text": "¡Ánimo, la próxima será mejor! 💪"}
+        }
+        embeds.append(last_embed)
+    
+    return {"embeds": embeds, "content": "📈 **RANKING SEMANAL SECRETFORCE**\n¡A ver quién sube de medalla esta semana! 🎮"}
 
 def main():
     logging.info("Iniciando obtención de estadísticas de OpenDota")
