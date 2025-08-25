@@ -1,0 +1,39 @@
+name: Dota 2 Stats to Discord
+
+on:
+  schedule:
+    # Se ejecuta diariamente a las 18:00 UTC
+    - cron: '0 18 * * *'
+  workflow_dispatch: # Permite ejecución manual
+
+jobs:
+  dota-stats:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v3
+
+    - name: Configurar Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Instalar dependencias
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests python-dotenv
+
+    - name: Ejecutar script de estadísticas
+      env:
+        STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
+        DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        STEAM_IDS: ${{ secrets.STEAM_IDS }}
+      run: python scripts/dota_stats.py
+
+    - name: Notificar éxito
+      if: success()
+      run: echo "Estadísticas enviadas a Discord correctamente"
+
+    - name: Notificar fallo
+      if: failure()
+      run: echo "Error al enviar estadísticas. Verifica los logs."
