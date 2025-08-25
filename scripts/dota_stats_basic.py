@@ -3,124 +3,128 @@ import requests
 import json
 from datetime import datetime
 import logging
-from bs4 import BeautifulSoup
-import time
-import random
 
 # Configurar logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('dota_stats.log'),
         logging.StreamHandler()
     ]
 )
 
 # Configuración
 DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL')
-STEAM_IDS = os.getenv('STEAM_IDS').split(',')
+STEAM_IDS_32 = os.getenv('STEAM_IDS_32').split(',')  # Ahora usamos Steam ID 32
+PLAYER_NAMES = os.getenv('PLAYER_NAMES', '').split(',')
 
-# Constante para conversión de Steam ID
-STEAM_ID64_BASE = 76561197960265728
+# Mapeo de nombres si se proporcionan
+if PLAYER_NAMES and len(PLAYER_NAMES) == len(STEAM_IDS_32):
+    NAME_MAPPING = dict(zip(STEAM_IDS_32, PLAYER_NAMES))
+else:
+    NAME_MAPPING = {}
 
-def get_steam_id_32(steam_id_64):
-    """Convierte Steam ID 64 a Steam ID 32 (account_id)"""
+def get_opendota_player_info(steam_id_32):
+    """Obtiene información del jugador de OpenDota API"""
     try:
-        return int(steam_id_64) - STEAM_ID64_BASE
-    except (ValueError, TypeError):
-        logging.error(f"Error convirtiendo Steam ID: {steam_id_64}")
-        return None
-
-def get_player_name(steam_id_64):
-    """Obtiene el nombre del jugador desde Steam API (opcional)"""
-    # Si no tienes API key de Steam, usarás solo los IDs
-    return f"Jugador_{steam_id_64[-8:]}"
-
-def scrape_dotabuff_basic(steam_id_32):
-    """Obtiene solo medalla y win rate de Dotabuff"""
-    try:
-        url = f"https://www.dotabuff.com/players/{steam_id_32}"
-        
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Connection': 'keep-alive',
-        }
-        
-        # Esperar un tiempo aleatorio para evitar detección
-        time.sleep(random.uniform(2, 4))
-        
-        response = requests.get(url, headers=headers, timeout=15)
+        url = f"https://api.opendota.com/api/players/{steam_id_32}"
+        response = requests.get(url, timeout=15)
         
         if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            stats = {'steam_id_32': steam_id_32}
-            
-            # Obtener medalla/ranking
-            medal_elem = soup.find('div', class_='rank-tier')
-            if medal_elem:
-                medal_title = medal_elem.get('title', '')
-                if 'Rank: ' in medal_title:
-                    stats['medal'] = medal_title.replace('Rank: ', '')
-                else:
-                    stats['medal'] = medal_title
-            
-            # Obtener winrate
-            winrate_elem = soup.find('div', class_='header-content-secondary')
-            if winrate_elem:
-                winrate_text = winrate_elem.text.strip()
-                if 'Win Rate' in winrate_text:
-                    # Extraer el porcentaje de winrate
-                    lines = winrate_text.split('\n')
-                    for line in lines:
-                        if '%' in line and 'Win Rate' in line:
-                            stats['winrate'] = line.split('Win Rate')[-1].strip()
-                            break
-            
-            return stats
-            
-        elif response.status_code == 404:
-            logging.warning(f"Perfil de Dotabuff no encontrado: {steam_id_32}")
-            return None
-        elif response.status_code == 429:
-            logging.warning("Demasiadas solicitudes - Rate limiting")
-            return None
+            return response.json()
         else:
-            logging.warning(f"Error HTTP {response.status_code}")
+            logging.warning(f"Error HTTP {response.status_code} para Steam ID 32: {steam_id_32}")
             return None
             
     except Exception as e:
-        logging.error(f"Error scraping Dotabuff: {e}")
+        logging.error(f"Error obteniendo datos de OpenDota: {e}")
         return None
 
+def get_opendota_winloss(steam_id_32):
+    """Obtiene estadísticas de wins/losses"""
+    try:
+        url = f"https://api.opendota.com/api/players/{steam_id_32}/wl"
+        response = requests.get(url, timeout=15)
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            logging.warning(f"Error HTTP {response.status_code} para stats de: {steam_id_32}")
+            return None
+            
+    except Exception as e:
+        logging.error(f"Error obteniendo stats W/L: {e}")
+        return None
+
+def get_opendota_rank(steam_id_32):
+    """Obtiene información de ranking"""
+    try:
+        url = f"https://api.opendota.com/api/players/{steam_id_32}"
+        response = requests.get(url, timeout=15)
+        
+        if response.status_code == 200:
+            data = response.json()
+            return data.get('rank_tier'), data.get('leaderboard_rank')
+        return None, None
+            
+    except Exception as e:
+        logging.error(f"Error obteniendo rank: {e}")
+        return None, None
+
+def parse_rank_tier(rank_tier):
+    """Convierte el rank_tier numérico a nombre de medalla"""
+    if not rank_tier:
+        return "No rank"
+    
+    rank_str = str(rank_tier)
+    if len(rank_str) != 2:
+        return "No rank"
+    
+    medal_level = int(rank_str[0])
+    star_level = int(rank_str[1])
+    
+    medals = {
+        1: "Heraldo",
+        2: "Guardian", 
+        3: "Crusader",
+        4: "Archon",
+        5: "Legend",
+        6: "Ancient",
+        7: "Divine",
+        8: "Immortal"
+    }
+    
+    medal_name = medals.get(medal_level, "Unknown")
+    return f"{medal_name} {star_level}★"
+
 def create_discord_message(players_data):
-    """Crea el mensaje para Discord con datos básicos"""
+    """Crea el mensaje para Discord"""
     if not players_data:
         embed = {
             "title": "❌ Error al obtener estadísticas",
             "color": 16711680,
-            "description": "No se pudieron obtener las estadísticas de Dotabuff.",
+            "description": "No se pudieron obtener las estadísticas de OpenDota.",
             "footer": {"text": f"Actualizado el {datetime.now().strftime('%d/%m/%Y %H:%M')}"}
         }
         return {"embeds": [embed]}
     
+    # Ordenar por winrate descendente
+    players_data.sort(key=lambda x: x.get('winrate', 0), reverse=True)
+    
     embed = {
-        "title": "🏆 Estadísticas Básicas de Dota 2",
-        "color": 5814783,
-        "thumbnail": {"url": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota2_social.jpg"},
+        "title": "🏆 Estadísticas de Dota 2 - OpenDota",
+        "color": 3447003,  # Azul
+        "thumbnail": {"url": "https://www.opendota.com/static/images/logos/opendota.png"},
         "fields": [],
         "footer": {"text": f"Actualizado el {datetime.now().strftime('%d/%m/%Y %H:%M')}"}
     }
     
     for player in players_data:
-        medal = player.get('medal', 'No disponible')
-        winrate = player.get('winrate', 'N/A')
-        
-        field_value = f"**Medalla:** {medal}\n"
-        field_value += f"**Win Rate:** {winrate}"
+        field_value = f"**Medalla:** {player.get('medal', 'No rank')}\n"
+        field_value += f"**Partidas:** {player.get('total_matches', 0)}\n"
+        field_value += f"**Victorias:** {player.get('wins', 0)}\n"
+        field_value += f"**Derrotas:** {player.get('losses', 0)}\n"
+        field_value += f"**Winrate:** {player.get('winrate', 0)}%"
         
         embed["fields"].append({
             "name": player['name'],
@@ -128,44 +132,47 @@ def create_discord_message(players_data):
             "inline": True
         })
     
-    return {"embeds": [embed], "content": "📊 **Estadísticas básicas del equipo**"}
+    return {"embeds": [embed], "content": "📊 **Estadísticas del equipo - OpenDota API**"}
 
 def main():
-    logging.info("Iniciando obtención de estadísticas básicas de Dotabuff")
+    logging.info("Iniciando obtención de estadísticas de OpenDota")
     
     players_data = []
     
-    for steam_id in STEAM_IDS:
-        steam_id = steam_id.strip()
-        if not steam_id:
-            continue
-            
-        logging.info(f"Procesando SteamID: {steam_id}")
-        
-        # Convertir a Steam ID 32 para Dotabuff
-        steam_id_32 = get_steam_id_32(steam_id)
+    for steam_id_32 in STEAM_IDS_32:
+        steam_id_32 = steam_id_32.strip()
         if not steam_id_32:
             continue
+            
+        logging.info(f"Procesando Steam ID 32: {steam_id_32}")
         
         # Obtener nombre del jugador
-        player_name = get_player_name(steam_id)
+        player_name = NAME_MAPPING.get(steam_id_32, f"Jugador_{steam_id_32[-6:]}")
         
-        # Obtener estadísticas de Dotabuff
-        dotabuff_stats = scrape_dotabuff_basic(steam_id_32)
+        # Obtener información de OpenDota
+        player_info = get_opendota_player_info(steam_id_32)
+        winloss_info = get_opendota_winloss(steam_id_32)
+        rank_tier, leaderboard_rank = get_opendota_rank(steam_id_32)
         
-        if dotabuff_stats:
-            players_data.append({
-                'name': player_name,
-                'medal': dotabuff_stats.get('medal', 'No disponible'),
-                'winrate': dotabuff_stats.get('winrate', 'N/A')
-            })
-        else:
-            # Si no se pueden obtener datos, agregar información básica
-            players_data.append({
-                'name': player_name,
-                'medal': 'No disponible',
-                'winrate': 'N/A'
-            })
+        # Procesar datos
+        wins = winloss_info.get('win', 0) if winloss_info else 0
+        losses = winloss_info.get('lose', 0) if winloss_info else 0
+        total_matches = wins + losses
+        winrate = (wins / total_matches * 100) if total_matches > 0 else 0
+        
+        # Parsear medalla
+        medal = parse_rank_tier(rank_tier)
+        if leaderboard_rank:
+            medal = f"Inmortal Top {leaderboard_rank}"
+        
+        players_data.append({
+            'name': player_name,
+            'wins': wins,
+            'losses': losses,
+            'total_matches': total_matches,
+            'winrate': round(winrate, 1),
+            'medal': medal
+        })
         
         # Esperar entre solicitudes para evitar rate limiting
         time.sleep(1)
