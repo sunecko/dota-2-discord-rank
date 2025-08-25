@@ -1,7 +1,11 @@
 import os
 import requests
-import logging
+import json
 from datetime import datetime
+import logging
+from bs4 import BeautifulSoup
+import time
+import random
 
 # Configurar logging
 logging.basicConfig(
@@ -14,100 +18,169 @@ logging.basicConfig(
 )
 
 # Configuración
-STEAM_API_KEY = os.getenv('STEAM_API_KEY')
 DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL')
+STEAM_IDS = os.getenv('STEAM_IDS').split(',')
 
-# Steam64 IDs de tus amigos
-STEAM64_IDS = {
-    "win": 76561199433152699,
-    "Rayden": 76561199387357759,
-    "chipi": 76561199406082220,
-    "miguelo": 76561199302547911,
-    "sunecko": 76561198873989123
-}
+# Constante para conversión de Steam ID
+STEAM_ID64_BASE = 76561197960265728
 
-def get_match_history(steam64, limit=20):
-    """Obtiene el historial de partidas recientes usando la API Dev de Steam"""
-    url = "https://api.steampowered.com/IDOTA2Match_570/GetMatchHistory/v1"
-    params = {'key': STEAM_API_KEY, 'account_id': steam64, 'matches_requested': limit}
+def get_steam_id_32(steam_id_64):
+    """Convierte Steam ID 64 a Steam ID 32 (account_id)"""
     try:
-        resp = requests.get(url, params=params, timeout=10)
-        resp.raise_for_status()
-        return resp.json().get('result', {}).get('matches', [])
-    except Exception as e:
-        logging.error(f"Error obteniendo historial de {steam64}: {e}")
-        return []
+        return int(steam_id_64) - STEAM_ID64_BASE
+    except (ValueError, TypeError):
+        logging.error(f"Error convirtiendo Steam ID: {steam_id_64}")
+        return None
 
-def get_match_details(match_id):
-    """Obtiene detalles de la partida"""
-    url = "https://api.steampowered.com/IDOTA2Match_570/GetMatchDetails/v1"
-    params = {'key': STEAM_API_KEY, 'match_id': match_id}
+def get_player_name(steam_id_64):
+    """Obtiene el nombre del jugador desde Steam API (opcional)"""
+    # Si no tienes API key de Steam, usarás solo los IDs
+    return f"Jugador_{steam_id_64[-8:]}"
+
+def scrape_dotabuff_basic(steam_id_32):
+    """Obtiene solo medalla y win rate de Dotabuff"""
     try:
-        resp = requests.get(url, params=params, timeout=10)
-        resp.raise_for_status()
-        return resp.json().get('result', {})
+        url = f"https://www.dotabuff.com/players/{steam_id_32}"
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Connection': 'keep-alive',
+        }
+        
+        # Esperar un tiempo aleatorio para evitar detección
+        time.sleep(random.uniform(2, 4))
+        
+        response = requests.get(url, headers=headers, timeout=15)
+        
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            stats = {'steam_id_32': steam_id_32}
+            
+            # Obtener medalla/ranking
+            medal_elem = soup.find('div', class_='rank-tier')
+            if medal_elem:
+                medal_title = medal_elem.get('title', '')
+                if 'Rank: ' in medal_title:
+                    stats['medal'] = medal_title.replace('Rank: ', '')
+                else:
+                    stats['medal'] = medal_title
+            
+            # Obtener winrate
+            winrate_elem = soup.find('div', class_='header-content-secondary')
+            if winrate_elem:
+                winrate_text = winrate_elem.text.strip()
+                if 'Win Rate' in winrate_text:
+                    # Extraer el porcentaje de winrate
+                    lines = winrate_text.split('\n')
+                    for line in lines:
+                        if '%' in line and 'Win Rate' in line:
+                            stats['winrate'] = line.split('Win Rate')[-1].strip()
+                            break
+            
+            return stats
+            
+        elif response.status_code == 404:
+            logging.warning(f"Perfil de Dotabuff no encontrado: {steam_id_32}")
+            return None
+        elif response.status_code == 429:
+            logging.warning("Demasiadas solicitudes - Rate limiting")
+            return None
+        else:
+            logging.warning(f"Error HTTP {response.status_code}")
+            return None
+            
     except Exception as e:
-        logging.error(f"Error obteniendo detalles de match {match_id}: {e}")
-        return {}
+        logging.error(f"Error scraping Dotabuff: {e}")
+        return None
 
-def calculate_winrate(steam64, matches):
-    """Calcula winrate basado en las partidas obtenidas"""
-    wins = 0
-    total = len(matches)
-    for match in matches:
-        details = get_match_details(match['match_id'])
-        players = details.get('players', [])
-        player = next((p for p in players if p['account_id'] == steam64), None)
-        if not player:
-            continue
-        radiant_win = details.get('radiant_win')
-        is_radiant = player['player_slot'] < 128
-        if (is_radiant and radiant_win) or (not is_radiant and not radiant_win):
-            wins += 1
-    winrate = (wins / total * 100) if total else 0
-    return wins, total, winrate
-
-def create_discord_message(data):
+def create_discord_message(players_data):
+    """Crea el mensaje para Discord con datos básicos"""
+    if not players_data:
+        embed = {
+            "title": "❌ Error al obtener estadísticas",
+            "color": 16711680,
+            "description": "No se pudieron obtener las estadísticas de Dotabuff.",
+            "footer": {"text": f"Actualizado el {datetime.now().strftime('%d/%m/%Y %H:%M')}"}
+        }
+        return {"embeds": [embed]}
+    
     embed = {
-        "title": "📊 Estadísticas Dota 2 (Steam Dev API)",
+        "title": "🏆 Estadísticas Básicas de Dota 2",
         "color": 5814783,
+        "thumbnail": {"url": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota2_social.jpg"},
         "fields": [],
-        "footer": {"text": f"Actualizado {datetime.now().strftime('%Y-%m-%d %H:%M')}"}
+        "footer": {"text": f"Actualizado el {datetime.now().strftime('%d/%m/%Y %H:%M')}"}
     }
-    for name, stats in data.items():
-        v = (
-            f"Partidas procesadas: {stats['total']}\n"
-            f"Victorias: {stats['wins']}\n"
-            f"Winrate: {stats['winrate']:.1f}%"
-        )
-        embed["fields"].append({"name": name, "value": v, "inline": True})
-    return {"embeds": [embed]}
+    
+    for player in players_data:
+        medal = player.get('medal', 'No disponible')
+        winrate = player.get('winrate', 'N/A')
+        
+        field_value = f"**Medalla:** {medal}\n"
+        field_value += f"**Win Rate:** {winrate}"
+        
+        embed["fields"].append({
+            "name": player['name'],
+            "value": field_value,
+            "inline": True
+        })
+    
+    return {"embeds": [embed], "content": "📊 **Estadísticas básicas del equipo**"}
 
 def main():
-    logging.info("Iniciando obtención de estadísticas de Dota 2 (Steam Dev API)")
-    results = {}
-    for name, s64 in STEAM64_IDS.items():
-        logging.info(f"Procesando {name} ({s64})")
-        matches = get_match_history(s64)
-        if not matches:
-            logging.warning(f"No se encontraron partidas para {name}")
-            results[name] = {"wins": 0, "total": 0, "winrate": 0}
-            continue
-        wins, total, winrate = calculate_winrate(s64, matches)
-        results[name] = {"wins": wins, "total": total, "winrate": winrate}
-        logging.info(f"{name}: {wins}/{total} victorias ({winrate:.1f}%)")
+    logging.info("Iniciando obtención de estadísticas básicas de Dotabuff")
     
-    # Enviar mensaje a Discord
-    message = create_discord_message(results)
+    players_data = []
+    
+    for steam_id in STEAM_IDS:
+        steam_id = steam_id.strip()
+        if not steam_id:
+            continue
+            
+        logging.info(f"Procesando SteamID: {steam_id}")
+        
+        # Convertir a Steam ID 32 para Dotabuff
+        steam_id_32 = get_steam_id_32(steam_id)
+        if not steam_id_32:
+            continue
+        
+        # Obtener nombre del jugador
+        player_name = get_player_name(steam_id)
+        
+        # Obtener estadísticas de Dotabuff
+        dotabuff_stats = scrape_dotabuff_basic(steam_id_32)
+        
+        if dotabuff_stats:
+            players_data.append({
+                'name': player_name,
+                'medal': dotabuff_stats.get('medal', 'No disponible'),
+                'winrate': dotabuff_stats.get('winrate', 'N/A')
+            })
+        else:
+            # Si no se pueden obtener datos, agregar información básica
+            players_data.append({
+                'name': player_name,
+                'medal': 'No disponible',
+                'winrate': 'N/A'
+            })
+        
+        # Esperar entre solicitudes para evitar rate limiting
+        time.sleep(1)
+    
+    # Crear y enviar mensaje a Discord
+    message = create_discord_message(players_data)
+    
     try:
-        resp = requests.post(DISCORD_WEBHOOK_URL, json=message, timeout=10)
-        if resp.status_code in [200, 204]:
+        response = requests.post(DISCORD_WEBHOOK_URL, json=message, timeout=10)
+        if response.status_code in [200, 204]:
             logging.info("Mensaje enviado correctamente a Discord")
         else:
-            logging.error(f"Error enviando mensaje a Discord: {resp.status_code} - {resp.text}")
+            logging.error(f"Error al enviar mensaje: {response.status_code} - {response.text}")
     except Exception as e:
-        logging.error(f"Error al enviar mensaje a Discord: {e}")
+        logging.error(f"Error en la solicitud a Discord: {e}")
 
 if __name__ == "__main__":
     main()
-
