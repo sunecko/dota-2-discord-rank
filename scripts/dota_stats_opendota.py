@@ -16,14 +16,15 @@ logging.basicConfig(
 
 # Configuración
 DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL')
-STEAM_IDS = os.getenv('STEAM_IDS').split(',')  # Usamos STEAM_IDS (contiene los Steam ID 32)
-PLAYER_NAMES = os.getenv('PLAYER_NAMES', '').split(',')
 
-# Mapeo de nombres si se proporcionan
-if PLAYER_NAMES and len(PLAYER_NAMES) == len(STEAM_IDS):
-    NAME_MAPPING = dict(zip(STEAM_IDS, PLAYER_NAMES))
-else:
-    NAME_MAPPING = {}
+# Mapeo directo de Steam ID 32 a nombres de jugadores
+PLAYERS = {
+    '913723395': 'sunecko',
+    '1445816492': 'chipi', 
+    '472886971': 'win',
+    '429237631': 'Rayden',
+    '342290983': 'miguelo'
+}
 
 def get_opendota_player_info(steam_id_32):
     """Obtiene información del jugador de OpenDota API"""
@@ -34,7 +35,7 @@ def get_opendota_player_info(steam_id_32):
         if response.status_code == 200:
             return response.json()
         else:
-            logging.warning(f"Error HTTP {response.status_code} para Steam ID 32: {steam_id_32}")
+            logging.warning(f"Error HTTP {response.status_code} para {steam_id_32}")
             return None
             
     except Exception as e:
@@ -125,15 +126,8 @@ def main():
     
     players_data = []
     
-    for steam_id_32 in STEAM_IDS:
-        steam_id_32 = steam_id_32.strip()
-        if not steam_id_32:
-            continue
-            
-        logging.info(f"Procesando Steam ID 32: {steam_id_32}")
-        
-        # Obtener nombre del jugador
-        player_name = NAME_MAPPING.get(steam_id_32, f"Jugador_{steam_id_32[-6:]}")
+    for steam_id_32, player_name in PLAYERS.items():
+        logging.info(f"Procesando {player_name} (ID: {steam_id_32})")
         
         # Obtener información de OpenDota
         player_info = get_opendota_player_info(steam_id_32)
@@ -160,7 +154,8 @@ def main():
             'losses': losses,
             'total_matches': total_matches,
             'winrate': round(winrate, 1),
-            'medal': medal
+            'medal': medal,
+            'steam_id': steam_id_32
         })
         
         # Esperar entre solicitudes para evitar rate limiting
