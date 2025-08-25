@@ -15,12 +15,12 @@ logging.basicConfig(
 
 # Configuración
 DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL')
-STEAM_IDS_32 = os.getenv('STEAM_IDS_32').split(',')  # Ahora usamos Steam ID 32
+STEAM_IDS = os.getenv('STEAM_IDS').split(',')  # Ahora usamos Steam ID 32
 PLAYER_NAMES = os.getenv('PLAYER_NAMES', '').split(',')
 
 # Mapeo de nombres si se proporcionan
-if PLAYER_NAMES and len(PLAYER_NAMES) == len(STEAM_IDS_32):
-    NAME_MAPPING = dict(zip(STEAM_IDS_32, PLAYER_NAMES))
+if PLAYER_NAMES and len(PLAYER_NAMES) == len(STEAM_IDS):
+    NAME_MAPPING = dict(zip(STEAM_IDS, PLAYER_NAMES))
 else:
     NAME_MAPPING = {}
 
@@ -139,7 +139,7 @@ def main():
     
     players_data = []
     
-    for steam_id_32 in STEAM_IDS_32:
+    for steam_id_32 in STEAM_IDS:
         steam_id_32 = steam_id_32.strip()
         if not steam_id_32:
             continue
@@ -191,3 +191,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
