@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 import logging
 import time
+import random
 
 # Configurar logging
 logging.basicConfig(
