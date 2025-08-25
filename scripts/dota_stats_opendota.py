@@ -39,7 +39,8 @@ FUNNY_PHRASES = [
     "🚑 Récord mundial en viajes a la fountain",
     "🍗 Chef especializado en feed",
     "🌪️ Maestro del throw épico",
-    "👻 Fantasma en las teamfights"
+    "👻 Fantasma en las teamfights",
+    "🏳️‍🌈 Culidefondado"
 ]
 
 def get_opendota_player_info(steam_id_32):
@@ -198,7 +199,7 @@ def create_discord_message(players_data):
         }
         embeds.append(last_embed)
     
-    return {"embeds": embeds, "content": "📈 **RANKING SEMANAL SECRETFORCE**\n¡A ver quién sube de medalla esta semana! 🎮"}
+    return {"embeds": embeds, "content": "📈 **RANKING SEMANAL SECRET FORCE**\n¡El ultimo en llegar a inmortal es gay 🏳️‍🌈! 🎮"}
 
 def main():
     logging.info("Iniciando obtención de estadísticas de OpenDota")
