@@ -1,4 +1,4 @@
-name: Dota 2 Basic Stats to Discord
+name: Dota 2 Stats to Discord - OpenDota
 
 on:
   schedule:
@@ -19,14 +19,15 @@ jobs:
 
     - name: Instalar dependencias
       run: |
-        pip install requests beautifulsoup4
+        pip install requests
 
-    - name: Ejecutar script básico de estadísticas
+    - name: Ejecutar script de OpenDota
       env:
         DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        STEAM_IDS: ${{ secrets.STEAM_IDS }}
-      run: python scripts/dota_stats_basic.py
+        STEAM_IDS_32: ${{ secrets.STEAM_IDS_32 }}
+        PLAYER_NAMES: ${{ secrets.PLAYER_NAMES }}
+      run: python scripts/dota_stats_opendota.py
 
     - name: Notificar éxito
       if: success()
-      run: echo "Estadísticas básicas enviadas a Discord"
+      run: echo "Estadísticas de OpenDota enviadas a Discord"
