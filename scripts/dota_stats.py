@@ -3,130 +3,74 @@ import requests
 import logging
 from datetime import datetime
 
-# Configurar logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('dota_stats.log'),
-        logging.StreamHandler()
-    ]
-)
-
 # Configuración
+STEAM_API_KEY = os.getenv('STEAM_API_KEY')
 DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL')
 
-# Tus amigos en formato Steam32 ID
-PLAYERS = {
-    "win": 1168439971,
-    "Rayden": 1220652031,
-    "chipi": 1166030492,
-    "miguelo": 1122906683,
-    "sunecko": 76561198873989123,
+# Steam64 IDs de tus amigos
+STEAM64_IDS = {
+    "win": 76561199433152699,
+    "Rayden": 76561199387357759,
+    "chipi": 76561199406082220,
+    "miguelo": 76561199302547911,
+    "sunecko": 76561198873989123
 }
 
-# Mapeo de medallas
-RANKS = {
-    1: "Herald", 2: "Guardian", 3: "Crusader",
-    4: "Archon", 5: "Legend", 6: "Ancient",
-    7: "Divine", 8: "Immortal"
-}
+def steam64_to_steam32(s64):
+    return s64 - 76561197960265728
 
-def get_player_stats(account_id):
-    """Obtiene perfil y win/loss de OpenDota"""
-    try:
-        # Perfil (rank, mmr, nombre)
-        profile_resp = requests.get(f"https://api.opendota.com/api/players/{account_id}", timeout=10)
-        profile_resp.raise_for_status()
-        profile = profile_resp.json()
+def get_match_history(steam32):
+    url = f"https://api.steampowered.com/IDOTA2Match_205790/GetMatchHistory/v1"
+    params = {'key': STEAM_API_KEY, 'account_id': steam32}
+    resp = requests.get(url, params=params, timeout=10)
+    resp.raise_for_status()
+    return resp.json().get('result', {}).get('matches', [])
 
-        # Win/loss
-        wl_resp = requests.get(f"https://api.opendota.com/api/players/{account_id}/wl", timeout=10)
-        wl_resp.raise_for_status()
-        wl = wl_resp.json()
+def get_match_details(match_id):
+    url = f"https://api.steampowered.com/IDOTA2Match_205790/GetMatchDetails/v1"
+    params = {'key': STEAM_API_KEY, 'match_id': match_id}
+    resp = requests.get(url, params=params, timeout=10)
+    resp.raise_for_status()
+    return resp.json().get('result', {})
 
-        wins = wl.get("win", 0)
-        losses = wl.get("lose", 0)
-        total = wins + losses
-        winrate = (wins / total * 100) if total > 0 else 0
+def calculate_winrate(steam32, matches):
+    wins = 0
+    total = len(matches)
+    for m in matches[:20]:  # Limitar procesado (últimas 20)
+        details = get_match_details(m['match_id'])
+        player_slot = next(p for p in details.get('players', []) if p['account_id'] == steam32)
+        radiant_win = details.get('radiant_win')
+        is_radiant = player_slot['player_slot'] < 128
+        if (is_radiant and radiant_win) or (not is_radiant and not radiant_win):
+            wins += 1
+    return wins, total, (wins / total * 100) if total else 0
 
-        # Rank tier
-        rank_tier = profile.get("rank_tier")
-        if rank_tier:
-            rank_digit = int(str(rank_tier)[0])   # Ej: 6 → Ancient
-            star = int(str(rank_tier)[1])         # Ej: 3 → III
-            rank_name = f"{RANKS.get(rank_digit, 'Uncalibrated')} {star}"
-        else:
-            rank_name = "Uncalibrated"
-
-        return {
-            "name": profile.get("profile", {}).get("personaname", "Unknown"),
-            "rank": rank_name,
-            "mmr_estimate": profile.get("mmr_estimate", {}).get("estimate", "N/A"),
-            "wins": wins,
-            "losses": losses,
-            "winrate": f"{winrate:.1f}"
-        }
-
-    except Exception as e:
-        logging.error(f"Error obteniendo stats de {account_id}: {e}")
-        return None
-
-def create_discord_message(players_data):
-    """Crea embed de Discord"""
+def create_discord_message(data):
     embed = {
-        "title": "🏆 Estadísticas de Dota 2",
+        "title": "📊 Estadísticas Dota 2 (Dev API)",
         "color": 5814783,
-        "thumbnail": {
-            "url": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota2_social.jpg"
-        },
         "fields": [],
-        "footer": {
-            "text": f"Actualizado el {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-        }
+        "footer": { "text": f"Actualizado {datetime.now().strftime('%Y-%m-%d %H:%M')}" }
     }
-
-    for nickname, data in players_data.items():
-        if not data:
-            continue
-
-        field_value = (
-            f"**Medalla:** {data['rank']}\n"
-            f"**MMR estimado:** {data['mmr_estimate']}\n"
-            f"**Partidas:** {data['wins'] + data['losses']}\n"
-            f"**Winrate:** {data['winrate']}%"
+    for name, stats in data.items():
+        v = (
+            f"Partidas procesadas: {stats['total']}\n"
+            f"Victorias: {stats['wins']}\n"
+            f"Winrate: {stats['winrate']:.1f}%"
         )
-
-        embed["fields"].append({
-            "name": f"{nickname} ({data['name']})",
-            "value": field_value,
-            "inline": True
-        })
-
-    return {"embeds": [embed], "content": "📊 **Estadísticas diarias de Dota 2**"}
+        embed["fields"].append({"name": name, "value": v, "inline": True})
+    return {"embeds": [embed]}
 
 def main():
-    logging.info("Iniciando obtención de estadísticas de Dota 2")
+    logging.basicConfig(level=logging.INFO)
+    results = {}
+    for name, s64 in STEAM64_IDS.items():
+        steam32 = steam64_to_steam32(s64)
+        matches = get_match_history(steam32)
+        wins, total, winrate = calculate_winrate(steam32, matches)
+        results[name] = {"wins": wins, "total": total, "winrate": winrate}
+    msg = create_discord_message(results)
+    requests.post(DISCORD_WEBHOOK_URL, json=msg, timeout=10)
 
-    players_data = {}
-    for nickname, account_id in PLAYERS.items():
-        logging.info(f"Procesando {nickname} ({account_id})")
-        stats = get_player_stats(account_id)
-        players_data[nickname] = stats
-
-    # Crear embed
-    message = create_discord_message(players_data)
-
-    # Enviar a Discord
-    try:
-        resp = requests.post(DISCORD_WEBHOOK_URL, json=message, timeout=10)
-        if resp.status_code in [200, 204]:
-            logging.info("✅ Mensaje enviado correctamente a Discord")
-        else:
-            logging.error(f"❌ Error al enviar mensaje: {resp.status_code} - {resp.text}")
-    except Exception as e:
-        logging.error(f"❌ Error en la solicitud a Discord: {e}")
-
-if __name__ == "__main__":
+if __name__=="__main__":
     main()
-
