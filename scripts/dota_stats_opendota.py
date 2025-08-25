@@ -19,12 +19,27 @@ DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL')
 
 # Mapeo directo de Steam ID 32 a nombres de jugadores
 PLAYERS = {
-    '913723395': 'sunecko',
-    '1445816492': 'chipi', 
-    '472886971': 'win',
-    '429237631': 'Rayden',
-    '342290983': 'miguelo'
+    '913723395': 'SuNecko',
+    '1445816492': 'Chipi', 
+    '472886971': 'Win',
+    '429237631': 'Nagato',
+    '342290983': 'Miguelo',
+    '1476275421': 'Godynt',
+    '1060683927': 'Jorge',
+    '1846249016': 'Reime',
 }
+
+# Frases graciosas para el último lugar
+FUNNY_PHRASES = [
+    "🏆 Rey del Tutorial - ¡Sigue intentándolo!",
+    "💩 Especialista en alimentar al equipo enemigo",
+    "😴 Profesional del afk farming",
+    "🎯 Precisión legendaria... para fallar spells",
+    "🚑 Récord mundial en viajes a la fountain",
+    "🍗 Chef especializado en feed",
+    "🌪️ Maestro del throw épico",
+    "👻 Fantasma en las teamfights"
+]
 
 def get_opendota_player_info(steam_id_32):
     """Obtiene información del jugador de OpenDota API"""
@@ -84,8 +99,27 @@ def parse_rank_tier(rank_tier):
     medal_name = medals.get(medal_level, "Unknown")
     return f"{medal_name} {star_level}★"
 
+def get_medal_value(medal_name):
+    """Asigna un valor numérico a cada medalla para ordenar"""
+    medal_order = {
+        "Immortal": 8,
+        "Divine": 7,
+        "Ancient": 6,
+        "Legend": 5,
+        "Archon": 4,
+        "Crusader": 3,
+        "Guardian": 2,
+        "Heraldo": 1,
+        "No rank": 0
+    }
+    
+    for medal_key in medal_order:
+        if medal_key in medal_name:
+            return medal_order[medal_key]
+    return 0
+
 def create_discord_message(players_data):
-    """Crea el mensaje para Discord"""
+    """Crea el mensaje para Discord con ranking y bromas"""
     if not players_data:
         embed = {
             "title": "❌ Error al obtener estadísticas",
@@ -95,31 +129,48 @@ def create_discord_message(players_data):
         }
         return {"embeds": [embed]}
     
-    # Ordenar por winrate descendente
-    players_data.sort(key=lambda x: x.get('winrate', 0), reverse=True)
+    # Ordenar por valor de medalla (descendente) y luego por winrate
+    players_data.sort(key=lambda x: (get_medal_value(x.get('medal', 'No rank')), x.get('winrate', 0)), reverse=True)
+    
+    # Obtener el último lugar para la broma
+    last_place = players_data[-1] if players_data else None
+    funny_phrase = random.choice(FUNNY_PHRASES) if last_place else ""
     
     embed = {
-        "title": "🏆 Estadísticas de Dota 2 - OpenDota",
-        "color": 3447003,  # Azul
-        "thumbnail": {"url": "https://www.opendota.com/static/images/logos/opendota.png"},
+        "title": "🏆 Ranking SecretForce - Dota 2",
+        "color": 10181046,  # Púrpura
+        "thumbnail": {"url": "https://riki.dotabuff.com/t/l/12wFjEZJmK.png"},
         "fields": [],
         "footer": {"text": f"Actualizado el {datetime.now().strftime('%d/%m/%Y %H:%M')}"}
     }
     
-    for player in players_data:
-        field_value = f"**Medalla:** {player.get('medal', 'No rank')}\n"
-        field_value += f"**Partidas:** {player.get('total_matches', 0)}\n"
-        field_value += f"**Victorias:** {player.get('wins', 0)}\n"
-        field_value += f"**Derrotas:** {player.get('losses', 0)}\n"
-        field_value += f"**Winrate:** {player.get('winrate', 0)}%"
+    # Emojis para cada posición
+    position_emojis = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣"]
+    
+    for i, player in enumerate(players_data):
+        emoji = position_emojis[i] if i < len(position_emojis) else "🔹"
+        
+        field_value = f"{emoji} **{player.get('medal', 'No rank')}**\n"
+        field_value += f"📊 **WR:** {player.get('winrate', 0)}%\n"
+        field_value += f"⚔️ **W/L:** {player.get('wins', 0)}/{player.get('losses', 0)}\n"
+        field_value += f"🎯 **Total:** {player.get('total_matches', 0)} partidas"
+        
+        # Mensaje especial para el último lugar
+        if i == len(players_data) - 1:
+            field_value += f"\n\n🎖️ **{funny_phrase}**"
         
         embed["fields"].append({
-            "name": player['name'],
+            "name": f"{player['name']}",
             "value": field_value,
             "inline": True
         })
     
-    return {"embeds": [embed], "content": "📊 **Estadísticas del equipo - OpenDota API**"}
+    # Añadir descripción con el ranking general
+    top_player = players_data[0] if players_data else None
+    if top_player:
+        embed["description"] = f"**{top_player['name']}** lidera el ranking con {top_player.get('medal', 'No rank')} 🏆"
+    
+    return {"embeds": [embed], "content": "📈 **RANKING SEMANAL SECRETFORCE**\n¡A ver quién sube de medalla esta semana! 🎮"}
 
 def main():
     logging.info("Iniciando obtención de estadísticas de OpenDota")
