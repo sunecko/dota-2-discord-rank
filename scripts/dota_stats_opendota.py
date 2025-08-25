@@ -3,6 +3,7 @@ import requests
 import json
 from datetime import datetime
 import logging
+import time
 
 # Configurar logging
 logging.basicConfig(
@@ -15,7 +16,7 @@ logging.basicConfig(
 
 # Configuración
 DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL')
-STEAM_IDS = os.getenv('STEAM_IDS').split(',')  # Ahora usamos Steam ID 32
+STEAM_IDS = os.getenv('STEAM_IDS').split(',')  # Usamos STEAM_IDS (contiene los Steam ID 32)
 PLAYER_NAMES = os.getenv('PLAYER_NAMES', '').split(',')
 
 # Mapeo de nombres si se proporcionan
@@ -55,21 +56,6 @@ def get_opendota_winloss(steam_id_32):
     except Exception as e:
         logging.error(f"Error obteniendo stats W/L: {e}")
         return None
-
-def get_opendota_rank(steam_id_32):
-    """Obtiene información de ranking"""
-    try:
-        url = f"https://api.opendota.com/api/players/{steam_id_32}"
-        response = requests.get(url, timeout=15)
-        
-        if response.status_code == 200:
-            data = response.json()
-            return data.get('rank_tier'), data.get('leaderboard_rank')
-        return None, None
-            
-    except Exception as e:
-        logging.error(f"Error obteniendo rank: {e}")
-        return None, None
 
 def parse_rank_tier(rank_tier):
     """Convierte el rank_tier numérico a nombre de medalla"""
@@ -152,7 +138,6 @@ def main():
         # Obtener información de OpenDota
         player_info = get_opendota_player_info(steam_id_32)
         winloss_info = get_opendota_winloss(steam_id_32)
-        rank_tier, leaderboard_rank = get_opendota_rank(steam_id_32)
         
         # Procesar datos
         wins = winloss_info.get('win', 0) if winloss_info else 0
@@ -160,10 +145,14 @@ def main():
         total_matches = wins + losses
         winrate = (wins / total_matches * 100) if total_matches > 0 else 0
         
-        # Parsear medalla
+        # Obtener medalla del perfil
+        rank_tier = player_info.get('rank_tier') if player_info else None
         medal = parse_rank_tier(rank_tier)
+        
+        # Verificar si es Immortal con ranking
+        leaderboard_rank = player_info.get('leaderboard_rank') if player_info else None
         if leaderboard_rank:
-            medal = f"Inmortal Top {leaderboard_rank}"
+            medal = f"Immortal Top {leaderboard_rank}"
         
         players_data.append({
             'name': player_name,
@@ -191,4 +180,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
