@@ -28,7 +28,7 @@ STEAM64_IDS = {
 
 def get_match_history(steam64, limit=20):
     """Obtiene el historial de partidas recientes usando la API Dev de Steam"""
-    url = "https://api.steampowered.com/IDOTA2Match_205790/GetMatchHistory/v1"
+    url = "https://api.steampowered.com/IDOTA2Match_570/GetMatchHistory/v1"
     params = {'key': STEAM_API_KEY, 'account_id': steam64, 'matches_requested': limit}
     try:
         resp = requests.get(url, params=params, timeout=10)
@@ -40,7 +40,7 @@ def get_match_history(steam64, limit=20):
 
 def get_match_details(match_id):
     """Obtiene detalles de la partida"""
-    url = "https://api.steampowered.com/IDOTA2Match_205790/GetMatchDetails/v1"
+    url = "https://api.steampowered.com/IDOTA2Match_570/GetMatchDetails/v1"
     params = {'key': STEAM_API_KEY, 'match_id': match_id}
     try:
         resp = requests.get(url, params=params, timeout=10)
@@ -110,3 +110,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
