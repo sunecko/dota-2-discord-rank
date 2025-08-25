@@ -22,9 +22,9 @@ DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL')
 PLAYERS = {
     '913723395': 'SuNecko',
     '1445816492': 'Chipi', 
-    '472886971': 'Win',
+    '1472886971': 'Win',
     '1427092031': 'Nagato',
-    '342290983': 'Miguelo',
+    '1342290983': 'Miguelo',
     '1476275421': 'Godynt',
     '1060683927': 'Jorge',
     '1846249016': 'Reime',
