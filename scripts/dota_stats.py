@@ -1,8 +1,7 @@
 import os
 import requests
-import json
-from datetime import datetime, timedelta
 import logging
+from datetime import datetime
 
 # Configurar logging
 logging.basicConfig(
@@ -15,122 +14,68 @@ logging.basicConfig(
 )
 
 # Configuración
-STEAM_API_KEY = os.getenv('STEAM_API_KEY')
 DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL')
-STEAM_IDS = os.getenv('STEAM_IDS').split(',')
 
-def get_steam_id(steam_id):
-    """Obtiene el SteamID64"""
+# Tus amigos en formato Steam32 ID
+PLAYERS = {
+    "win": 1168439971,
+    "Rayden": 1220652031,
+    "chipi": 1166030492,
+    "miguelo": 1122906683
+}
+
+# Mapeo de medallas
+RANKS = {
+    1: "Herald", 2: "Guardian", 3: "Crusader",
+    4: "Archon", 5: "Legend", 6: "Ancient",
+    7: "Divine", 8: "Immortal"
+}
+
+def get_player_stats(account_id):
+    """Obtiene perfil y win/loss de OpenDota"""
     try:
-        if isinstance(steam_id, int) or steam_id.isdigit():
-            return str(steam_id)
+        # Perfil (rank, mmr, nombre)
+        profile_resp = requests.get(f"https://api.opendota.com/api/players/{account_id}", timeout=10)
+        profile_resp.raise_for_status()
+        profile = profile_resp.json()
+
+        # Win/loss
+        wl_resp = requests.get(f"https://api.opendota.com/api/players/{account_id}/wl", timeout=10)
+        wl_resp.raise_for_status()
+        wl = wl_resp.json()
+
+        wins = wl.get("win", 0)
+        losses = wl.get("lose", 0)
+        total = wins + losses
+        winrate = (wins / total * 100) if total > 0 else 0
+
+        # Rank tier
+        rank_tier = profile.get("rank_tier")
+        if rank_tier:
+            rank_digit = int(str(rank_tier)[0])   # Ej: 6 → Ancient
+            star = int(str(rank_tier)[1])         # Ej: 3 → III
+            rank_name = f"{RANKS.get(rank_digit, 'Uncalibrated')} {star}"
         else:
-            url = "https://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/"
-            params = {
-                'key': STEAM_API_KEY,
-                'vanityurl': steam_id
-            }
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            if data['response']['success'] == 1:
-                return data['response']['steamid']
-            else:
-                logging.error(f"No se pudo resolver el SteamID para: {steam_id}")
-                return None
+            rank_name = "Uncalibrated"
+
+        return {
+            "name": profile.get("profile", {}).get("personaname", "Unknown"),
+            "rank": rank_name,
+            "mmr_estimate": profile.get("mmr_estimate", {}).get("estimate", "N/A"),
+            "wins": wins,
+            "losses": losses,
+            "winrate": f"{winrate:.1f}"
+        }
+
     except Exception as e:
-        logging.error(f"Error obteniendo SteamID: {e}")
+        logging.error(f"Error obteniendo stats de {account_id}: {e}")
         return None
-
-def get_player_summaries(steam_id):
-    """Obtiene información básica del jugador"""
-    try:
-        url = "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/"
-        params = {
-            'key': STEAM_API_KEY,
-            'steamids': steam_id
-        }
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        return data['response']['players'][0] if data['response']['players'] else None
-    except Exception as e:
-        logging.error(f"Error obteniendo resumen del jugador: {e}")
-        return None
-
-def get_dota2_player_info(steam_id):
-    """Obtiene información específica de Dota 2 del jugador"""
-    try:
-        url = "https://api.steampowered.com/IEconDOTA2_570/GetPlayerOfficialInfo/v1/"
-        params = {
-            'key': STEAM_API_KEY,
-            'steamid': steam_id
-        }
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        
-        # Algunas respuestas pueden estar vacías para jugadores sin datos
-        if response.text.strip():
-            return response.json()
-        else:
-            return {}
-    except Exception as e:
-        logging.error(f"Error obteniendo info de Dota 2: {e}")
-        return {}
-
-def get_dota2_medal_info(steam_id):
-    """Obtiene información de medallas y ranking (usando endpoint alternativo)"""
-    try:
-        # Este es un endpoint no oficial pero ampliamente usado
-        # La API oficial no expone fácilmente las medallas
-        url = f"https://api.opendota.com/api/players/{steam_id}"
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        
-        if response.text.strip():
-            data = response.json()
-            return data
-        else:
-            return {}
-    except Exception as e:
-        logging.warning(f"No se pudo obtener info de medalla: {e}")
-        return {}
-
-def get_win_loss_stats(steam_id):
-    """Obtiene estadísticas de wins/losses"""
-    try:
-        url = "https://api.steampowered.com/IDOTA2Match_570/GetWinLossStats/v1/"
-        params = {
-            'key': STEAM_API_KEY,
-            'steamid': steam_id
-        }
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        
-        if response.text.strip():
-            return response.json()
-        else:
-            return {}
-    except Exception as e:
-        logging.error(f"Error obteniendo stats W/L: {e}")
-        return {}
 
 def create_discord_message(players_data):
-    """Crea el mensaje para Discord"""
-    if not players_data:
-        embed = {
-            "title": "❌ Error al obtener estadísticas de Dota 2",
-            "color": 16711680,  # Rojo
-            "description": "No se pudieron obtener las estadísticas. Verifica la configuración.",
-            "footer": {
-                "text": f"Actualizado el {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-            }
-        }
-        return {"embeds": [embed]}
-    
+    """Crea embed de Discord"""
     embed = {
         "title": "🏆 Estadísticas de Dota 2",
-        "color": 5814783,  # Púrpura
+        "color": 5814783,
         "thumbnail": {
             "url": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota2_social.jpg"
         },
@@ -139,87 +84,47 @@ def create_discord_message(players_data):
             "text": f"Actualizado el {datetime.now().strftime('%d/%m/%Y %H:%M')}"
         }
     }
-    
-    for player in players_data:
-        field_value = f"**Medalla:** {player.get('medal', 'No disponible')}\n"
-        field_value += f"**Nivel:** {player.get('level', 'N/A')}\n"
-        field_value += f"**Partidas:** {player.get('matches', 'N/A')}\n"
-        field_value += f"**Winrate:** {player.get('winrate', 'N/A')}%"
-        
+
+    for nickname, data in players_data.items():
+        if not data:
+            continue
+
+        field_value = (
+            f"**Medalla:** {data['rank']}\n"
+            f"**MMR estimado:** {data['mmr_estimate']}\n"
+            f"**Partidas:** {data['wins'] + data['losses']}\n"
+            f"**Winrate:** {data['winrate']}%"
+        )
+
         embed["fields"].append({
-            "name": player['personaname'],
+            "name": f"{nickname} ({data['name']})",
             "value": field_value,
             "inline": True
         })
-    
+
     return {"embeds": [embed], "content": "📊 **Estadísticas diarias de Dota 2**"}
 
 def main():
     logging.info("Iniciando obtención de estadísticas de Dota 2")
-    
-    players_data = []
-    
-    for steam_id in STEAM_IDS:
-        steam_id = steam_id.strip()
-        if not steam_id:
-            continue
-            
-        logging.info(f"Procesando SteamID: {steam_id}")
-        
-        # Obtener ID de Steam válido
-        valid_steam_id = get_steam_id(steam_id)
-        if not valid_steam_id:
-            logging.error(f"SteamID inválido: {steam_id}")
-            continue
-        
-        # Obtener información del jugador
-        player_summary = get_player_summaries(valid_steam_id)
-        if not player_summary:
-            logging.error(f"No se pudo obtener info para SteamID: {valid_steam_id}")
-            continue
-        
-        # Obtener información de Dota 2
-        dota_info = get_dota2_player_info(valid_steam_id)
-        medal_info = get_dota2_medal_info(valid_steam_id)
-        win_loss_info = get_win_loss_stats(valid_steam_id)
-        
-        # Procesar datos
-        medal = "Desconocida"
-        if medal_info and 'rank_tier' in medal_info:
-            rank = medal_info['rank_tier']
-            if rank:
-                division = str(rank)[-1] if len(str(rank)) > 1 else "1"
-                stars = str(rank)[0] if len(str(rank)) > 1 else str(rank)
-                medal = f"Heraldo {stars} estrellas (Div {division})"
-        
-        # Calcular winrate si hay datos disponibles
-        winrate = "N/A"
-        if win_loss_info and 'win_loss_stats' in win_loss_info:
-            wins = win_loss_info['win_loss_stats'].get('wins', 0)
-            losses = win_loss_info['win_loss_stats'].get('losses', 0)
-            total = wins + losses
-            if total > 0:
-                winrate = f"{(wins/total)*100:.1f}"
-        
-        players_data.append({
-            'personaname': player_summary.get('personaname', 'Jugador'),
-            'medal': medal,
-            'level': medal_info.get('profile', {}).get('level', 'N/A'),
-            'matches': medal_info.get('profile', {}).get('games', 'N/A'),
-            'winrate': winrate
-        })
-    
-    # Crear y enviar mensaje a Discord
+
+    players_data = {}
+    for nickname, account_id in PLAYERS.items():
+        logging.info(f"Procesando {nickname} ({account_id})")
+        stats = get_player_stats(account_id)
+        players_data[nickname] = stats
+
+    # Crear embed
     message = create_discord_message(players_data)
-    
+
+    # Enviar a Discord
     try:
-        response = requests.post(DISCORD_WEBHOOK_URL, json=message, timeout=10)
-        if response.status_code in [200, 204]:
-            logging.info("Mensaje enviado correctamente a Discord")
+        resp = requests.post(DISCORD_WEBHOOK_URL, json=message, timeout=10)
+        if resp.status_code in [200, 204]:
+            logging.info("✅ Mensaje enviado correctamente a Discord")
         else:
-            logging.error(f"Error al enviar mensaje: {response.status_code} - {response.text}")
+            logging.error(f"❌ Error al enviar mensaje: {resp.status_code} - {resp.text}")
     except Exception as e:
-        logging.error(f"Error en la solicitud a Discord: {e}")
+        logging.error(f"❌ Error en la solicitud a Discord: {e}")
 
 if __name__ == "__main__":
     main()
