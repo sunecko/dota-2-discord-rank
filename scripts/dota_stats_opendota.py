@@ -199,7 +199,7 @@ def create_discord_message(players_data):
         }
         embeds.append(last_embed)
     
-    return {"embeds": embeds, "content": "📈 **RANKING SEMANAL SECRET FORCE**\n¡El ultimo en llegar a inmortal es gay 🏳️‍🌈! 🎮"}
+    return {"embeds": embeds, "content": "📈 **RANKING SEMANAL SECRET FORCE**\n¡El ultimo en llegar a inmortal es gay 🏳️‍🌈! 🎮 @everyone "}
 
 def main():
     logging.info("Iniciando obtención de estadísticas de OpenDota")
@@ -254,4 +254,5 @@ def main():
         logging.error(f"Error en la solicitud a Discord: {e}")
 
 if __name__ == "__main__":
+
     main()
