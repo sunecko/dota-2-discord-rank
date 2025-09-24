@@ -19,16 +19,7 @@ logging.basicConfig(
 DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL')
 
 # Mapeo directo de Steam ID 32 a nombres de jugadores
-PLAYERS = {
-    '913723395': 'SuNecko',
-    '1445816492': 'Chipi', 
-    '1472886971': 'Win',
-    '1427092031': 'Nagato',
-    '1342282183': 'Miguelo',
-    '1476275421': 'Godynt',
-    '1060683927': 'Jorge',
-    '1846249016': 'Reime',
-}
+PLAYERS = json.loads(os.getenv("PLAYERS"))
 
 # Frases graciosas para el último lugar
 FUNNY_PHRASES = [
@@ -256,3 +247,4 @@ def main():
 if __name__ == "__main__":
 
     main()
+
