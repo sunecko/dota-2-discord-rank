@@ -35,3 +35,6 @@ Add the following:
   "123456754": "notail",
   "123456677": "miracle"
 }
+
+## Notes
+### The messages are personalized, but you can change and adapt them to your own specifications.
