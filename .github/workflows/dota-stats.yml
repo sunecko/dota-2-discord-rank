@@ -24,8 +24,10 @@ jobs:
     - name: Ejecutar script de OpenDota
       env:
         DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        PLAYERS: ${{ secrets.PLAYERS }}
       run: python scripts/dota_stats_opendota.py
 
     - name: Notificar éxito
       if: success()
       run: echo "Estadísticas de OpenDota enviadas a Discord"
+
