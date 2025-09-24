@@ -6,7 +6,6 @@ import logging
 import time
 import random
 
-# Configurar logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -15,13 +14,10 @@ logging.basicConfig(
     ]
 )
 
-# Configuración
 DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL')
 
-# Mapeo directo de Steam ID 32 a nombres de jugadores
 PLAYERS = json.loads(os.getenv("PLAYERS"))
 
-# Frases graciosas para el último lugar
 FUNNY_PHRASES = [
     "🏆 Rey del Tutorial - ¡Sigue intentándolo!",
     "💩 Especialista en alimentar al equipo enemigo",
@@ -35,7 +31,6 @@ FUNNY_PHRASES = [
 ]
 
 def get_opendota_player_info(steam_id_32):
-    """Obtiene información del jugador de OpenDota API"""
     try:
         url = f"https://api.opendota.com/api/players/{steam_id_32}"
         response = requests.get(url, timeout=15)
@@ -51,7 +46,6 @@ def get_opendota_player_info(steam_id_32):
         return None
 
 def get_opendota_winloss(steam_id_32):
-    """Obtiene estadísticas de wins/losses"""
     try:
         url = f"https://api.opendota.com/api/players/{steam_id_32}/wl"
         response = requests.get(url, timeout=15)
@@ -67,7 +61,6 @@ def get_opendota_winloss(steam_id_32):
         return None
 
 def parse_rank_tier(rank_tier):
-    """Convierte el rank_tier numérico a nombre de medalla"""
     if not rank_tier:
         return "No rank"
     
@@ -93,7 +86,6 @@ def parse_rank_tier(rank_tier):
     return f"{medal_name} {star_level}★"
 
 def get_medal_value(medal_name):
-    """Asigna un valor numérico a cada medalla para ordenar"""
     medal_order = {
         "Immortal": 8,
         "Divine": 7,
@@ -112,7 +104,6 @@ def get_medal_value(medal_name):
     return 0
 
 def create_discord_message(players_data):
-    """Crea el mensaje para Discord con mejor formato"""
     if not players_data:
         embed = {
             "title": "❌ Error al obtener estadísticas",
@@ -122,17 +113,13 @@ def create_discord_message(players_data):
         }
         return {"embeds": [embed]}
     
-    # Ordenar por valor de medalla (descendente) y luego por winrate
     players_data.sort(key=lambda x: (get_medal_value(x.get('medal', 'No rank')), x.get('winrate', 0)), reverse=True)
     
-    # Obtener el último lugar para la broma
     last_place = players_data[-1] if players_data else None
     funny_phrase = random.choice(FUNNY_PHRASES) if last_place else ""
     
-    # Crear múltiples embeds para mejor organización
     embeds = []
     
-    # Embed principal con el ranking top 3
     top_embed = {
         "title": "🏆 TOP 3 - Ranking Secret Force",
         "color": 15844367,  # Oro
@@ -142,10 +129,8 @@ def create_discord_message(players_data):
         "footer": {"text": f"Actualizado el {datetime.now().strftime('%d/%m/%Y %H:%M')}"}
     }
     
-    # Emojis para cada posición
     position_emojis = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "💩"]
     
-    # Top 3 en el embed principal
     for i, player in enumerate(players_data[:3]):
         emoji = position_emojis[i]
         top_embed["fields"].append({
@@ -156,11 +141,10 @@ def create_discord_message(players_data):
     
     embeds.append(top_embed)
     
-    # Embed para el resto de jugadores
     if len(players_data) > 3:
         rest_embed = {
             "title": "📊 Resto del Equipo",
-            "color": 3447003,  # Azul
+            "color": 3447003,
             "fields": [],
             "footer": {"text": "Siguiente actualización: Mañana a las 18:00"}
         }
@@ -175,11 +159,10 @@ def create_discord_message(players_data):
         
         embeds.append(rest_embed)
     
-    # Embed especial para el último lugar
     if last_place:
         last_embed = {
             "title": "😅 Mención Especial",
-            "color": 15105570,  # Rojo/naranja
+            "color": 15105570,  
             "description": f"**{last_place['name']}** - {funny_phrase}",
             "fields": [{
                 "name": "🏆 Estadísticas del Campeón",
@@ -200,21 +183,17 @@ def main():
     for steam_id_32, player_name in PLAYERS.items():
         logging.info(f"Procesando {player_name} (ID: {steam_id_32})")
         
-        # Obtener información de OpenDota
         player_info = get_opendota_player_info(steam_id_32)
         winloss_info = get_opendota_winloss(steam_id_32)
         
-        # Procesar datos
         wins = winloss_info.get('win', 0) if winloss_info else 0
         losses = winloss_info.get('lose', 0) if winloss_info else 0
         total_matches = wins + losses
         winrate = (wins / total_matches * 100) if total_matches > 0 else 0
         
-        # Obtener medalla del perfil
         rank_tier = player_info.get('rank_tier') if player_info else None
         medal = parse_rank_tier(rank_tier)
         
-        # Verificar si es Immortal con ranking
         leaderboard_rank = player_info.get('leaderboard_rank') if player_info else None
         if leaderboard_rank:
             medal = f"Immortal Top {leaderboard_rank}"
@@ -229,10 +208,8 @@ def main():
             'steam_id': steam_id_32
         })
         
-        # Esperar entre solicitudes para evitar rate limiting
         time.sleep(1)
     
-    # Crear y enviar mensaje a Discord
     message = create_discord_message(players_data)
     
     try:
@@ -247,4 +224,5 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
