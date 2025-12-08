@@ -149,7 +149,7 @@ def create_discord_message(players_data):
             "footer": {"text": "Siguiente actualización: Mañana a las 18:00"}
         }
         
-        for i, player in enumerate(players_data[3:], 4):
+        for i, player in enumerate(players_data[3:], 3):
             emoji = position_emojis[i] if i < len(position_emojis) else "🔹"
             rest_embed["fields"].append({
                 "name": f"{emoji} {player['name']} - {player.get('medal', 'No rank')}",
@@ -224,5 +224,6 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
