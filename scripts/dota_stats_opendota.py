@@ -129,7 +129,7 @@ def create_discord_message(players_data):
         "footer": {"text": f"Actualizado el {datetime.now().strftime('%d/%m/%Y %H:%M')}"}
     }
     
-    position_emojis = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "💩"]
+    position_emojis = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟", "💩"]
     
     for i, player in enumerate(players_data[:3]):
         emoji = position_emojis[i]
@@ -224,6 +224,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
