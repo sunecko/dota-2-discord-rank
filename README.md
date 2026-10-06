@@ -6,9 +6,9 @@ It was made to track and have fun with the matches we play with friends in our D
 ## 🚀 Features
 
 - Automatically fetches stats for your Dota squad.  
-- Generates a ranking ordered by medal and winrate.  
-- Highlights a **Top 3 leaderboard** with medals and stats.  
-- Posts a **daily update** to your Discord channel (18:00 UTC).  
+- Generates a ranking grouped by medal, ordered by stars, leaderboard position and winrate.  
+- Shows each player's winrate and their W/L for the last 7 days.  
+- Posts a **weekly update** to your Discord channel (Mondays, 18:00 UTC).  
 - Gives a **special mention** to the last place with funny phrases.  
 
 ## 📦 Requirements

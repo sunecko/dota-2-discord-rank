@@ -2,7 +2,7 @@ name: Dota 2 Stats to Discord - OpenDota
 
 on:
   schedule:
-    - cron: '0 18 * * *'  # Diariamente a las 18:00 UTC
+    - cron: '0 18 * * 1'  # Lunes a las 18:00 UTC
   workflow_dispatch:
 
 jobs:
