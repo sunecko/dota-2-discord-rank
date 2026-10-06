@@ -31,18 +31,21 @@ FUNNY_PHRASES = [
     "🏳️‍🌈 Culidefondado"
 ]
 
-# Primer dígito del rank_tier de OpenDota -> (icono, nombre)
+# Primer dígito del rank_tier de OpenDota -> (nombre, color del embed)
 MEDALS = {
-    8: ("👑", "Immortal"),
-    7: ("💎", "Divine"),
-    6: ("🏛️", "Ancient"),
-    5: ("🦁", "Legend"),
-    4: ("🛡️", "Archon"),
-    3: ("⚔️", "Crusader"),
-    2: ("🪖", "Guardian"),
-    1: ("🔰", "Heraldo"),
-    0: ("❔", "Sin rango")
+    8: ("Immortal", 0xE8B84A),
+    7: ("Divine", 0x5B8FD9),
+    6: ("Ancient", 0x3FA7A0),
+    5: ("Legend", 0x8FB9A8),
+    4: ("Archon", 0x58A0C8),
+    3: ("Crusader", 0xC0A26A),
+    2: ("Guardian", 0x8B9C6E),
+    1: ("Heraldo", 0x7E8F4E),
+    0: ("Sin rango", 0x808080)
 }
+
+MEDAL_IMAGE_URL = "https://www.opendota.com/assets/images/dota2/rank_icons/rank_icon_{}.png"
+TEAM_LOGO_URL = "https://riki.dotabuff.com/t/l/12wFjEZJmK.png"
 
 def get_opendota_player_info(steam_id_32):
     try:
@@ -112,30 +115,29 @@ def create_discord_message(players_data):
 
     last_place = players_data[-1]
 
-    embed = {
-        "title": "🏆 Ranking Secret Force",
-        "color": 15844367,  # Oro
-        "thumbnail": {"url": "https://riki.dotabuff.com/t/l/12wFjEZJmK.png"},
-        "fields": [],
-        "footer": {"text": f"Actualizado el {datetime.now().strftime('%d/%m/%Y %H:%M')} · Próxima actualización: el lunes que viene"}
-    }
+    # Un embed por medalla (máx. 9) con la medalla real de miniatura + uno final (Discord permite 10)
+    embeds = []
 
     for medal_level, group in groupby(players_data, key=lambda p: p['rank_tier'] // 10):
-        icon, medal_name = MEDALS.get(medal_level, MEDALS[0])
+        medal_name, color = MEDALS.get(medal_level, MEDALS[0])
         lines = [format_player_line(player, player is last_place) for player in group]
-        embed["fields"].append({
-            "name": f"{icon} {medal_name}",
-            "value": "\n".join(lines),
-            "inline": False
+        embeds.append({
+            "title": medal_name,
+            "color": color,
+            "thumbnail": {"url": MEDAL_IMAGE_URL.format(medal_level)},
+            "description": "\n".join(lines)
         })
 
-    embed["fields"].append({
-        "name": "😅 Mención Especial",
-        "value": f"**{last_place['name']}** — {random.choice(FUNNY_PHRASES)}",
-        "inline": False
+    embeds.append({
+        "color": 15105570,
+        "description": f"😅 **Mención Especial**\n**{last_place['name']}** — {random.choice(FUNNY_PHRASES)}",
+        "footer": {
+            "text": f"Actualizado el {datetime.now().strftime('%d/%m/%Y %H:%M')} · Próxima actualización: el lunes que viene",
+            "icon_url": TEAM_LOGO_URL
+        }
     })
 
-    return {"embeds": [embed], "content": "📈 **RANKING SEMANAL SECRET FORCE**\n¡El ultimo en llegar a inmortal es gay 🏳️‍🌈! 🎮 @everyone "}
+    return {"embeds": embeds, "content": "📈 **RANKING SEMANAL SECRET FORCE**\n¡El ultimo en llegar a inmortal es gay 🏳️‍🌈! 🎮 @everyone "}
 
 def main():
     logging.info("Iniciando obtención de estadísticas de OpenDota")
@@ -154,6 +156,10 @@ def main():
         total_matches = wins + losses
         winrate = (wins / total_matches * 100) if total_matches > 0 else 0
 
+        # OpenDota a veces mantiene un leaderboard_rank viejo de jugadores que ya bajaron de Immortal
+        rank_tier = player_info.get('rank_tier') or 0
+        leaderboard_rank = player_info.get('leaderboard_rank') if rank_tier >= 80 else None
+
         players_data.append({
             'name': player_name,
             'wins': wins,
@@ -162,8 +168,8 @@ def main():
             'winrate': round(winrate, 1),
             'week_wins': week_info.get('win', 0),
             'week_losses': week_info.get('lose', 0),
-            'rank_tier': player_info.get('rank_tier') or 0,
-            'leaderboard_rank': player_info.get('leaderboard_rank'),
+            'rank_tier': rank_tier,
+            'leaderboard_rank': leaderboard_rank,
             'steam_id': steam_id_32
         })
 
