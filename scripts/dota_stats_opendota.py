@@ -47,6 +47,17 @@ MEDALS = {
 MEDAL_IMAGE_URL = "https://www.opendota.com/assets/images/dota2/rank_icons/rank_icon_{}.png"
 TEAM_LOGO_URL = "https://riki.dotabuff.com/t/l/12wFjEZJmK.png"
 
+# Colores ANSI que soportan los bloques ```ansi de Discord
+GRAY = "30"
+RED = "31"
+GREEN = "32"
+YELLOW = "33"
+BOLD_WHITE = "1;37"
+
+MAX_NAME_WIDTH = 10
+WR_WIDTH = 4  # "100%"
+WL_WIDTH = 7  # "25W-27L"
+
 def get_opendota_player_info(steam_id_32):
     try:
         url = f"https://api.opendota.com/api/players/{steam_id_32}"
@@ -78,24 +89,40 @@ def get_opendota_winloss(steam_id_32, days=None):
         logging.error(f"Error obteniendo stats W/L: {e}")
         return None
 
+def ansi(text, color):
+    return f"\x1b[{color}m{text}\x1b[0m"
+
 def format_rank(player):
     if player['leaderboard_rank']:
         return f"#{player['leaderboard_rank']}"
 
     stars = player['rank_tier'] % 10
-    return f"{stars}★" if stars else "—"
+    return f"{stars}★" if stars else "-"
 
-def format_player_line(player, is_last):
-    prefix = "💩 " if is_last else ""
-
+def format_week_stats(player):
     if player['total_matches'] == 0:
-        stats = "🔒 perfil privado"
-    else:
-        week_matches = player['week_wins'] + player['week_losses']
-        week = f"{player['week_wins']}W-{player['week_losses']}L" if week_matches else "sin jugar"
-        stats = f"{player['winrate']}% · semana {week}"
+        return ansi(f"{'--':>{WR_WIDTH}}  {'privado':<{WL_WIDTH}}", GRAY)
 
-    return f"{prefix}**{player['name']}** · {format_rank(player)} · {stats}"
+    if player['week_winrate'] is None:
+        return ansi(f"{'--':>{WR_WIDTH}}  {'0W-0L':<{WL_WIDTH}}", GRAY)
+
+    wr_color = GREEN if player['week_winrate'] >= 50 else RED
+    winrate = ansi(f"{player['week_winrate']}%".rjust(WR_WIDTH), wr_color)
+
+    wins = f"{player['week_wins']}W"
+    losses = f"{player['week_losses']}L"
+    padding = " " * max(WL_WIDTH - len(wins) - len(losses) - 1, 0)
+    winloss = ansi(wins, GREEN) + "-" + ansi(losses, RED) + padding
+
+    return f"{winrate}  {winloss}"
+
+# El rango va al final porque el ★ puede no medir lo mismo que un carácter monoespaciado
+def format_player_line(player, name_width, is_last):
+    name = ansi(player['name'][:name_width].ljust(name_width), BOLD_WHITE)
+    rank = ansi(format_rank(player), YELLOW)
+    suffix = " 💩" if is_last else ""
+
+    return f"{name}  {format_week_stats(player)}  {rank}{suffix}"
 
 def create_discord_message(players_data):
     if not players_data:
@@ -107,32 +134,36 @@ def create_discord_message(players_data):
         }
         return {"embeds": [embed]}
 
-    # Medalla y estrellas, luego puesto en el leaderboard (menor es mejor), luego winrate
+    # Medalla y estrellas, luego puesto en el leaderboard (menor es mejor), luego winrate semanal
     players_data.sort(
-        key=lambda p: (p['rank_tier'], -(p['leaderboard_rank'] or float('inf')), p['winrate']),
+        key=lambda p: (
+            p['rank_tier'],
+            -(p['leaderboard_rank'] or float('inf')),
+            p['week_winrate'] if p['week_winrate'] is not None else -1
+        ),
         reverse=True
     )
 
     last_place = players_data[-1]
+    name_width = min(max(len(p['name']) for p in players_data), MAX_NAME_WIDTH)
 
-    # Un embed por medalla (máx. 9) con la medalla real de miniatura + uno final (Discord permite 10)
+    # Un embed por medalla (máx. 9) + uno final con la mención (Discord permite 10)
     embeds = []
 
     for medal_level, group in groupby(players_data, key=lambda p: p['rank_tier'] // 10):
         medal_name, color = MEDALS.get(medal_level, MEDALS[0])
-        lines = [format_player_line(player, player is last_place) for player in group]
+        lines = [format_player_line(player, name_width, player is last_place) for player in group]
         embeds.append({
-            "title": medal_name,
+            "author": {"name": medal_name, "icon_url": MEDAL_IMAGE_URL.format(medal_level)},
             "color": color,
-            "thumbnail": {"url": MEDAL_IMAGE_URL.format(medal_level)},
-            "description": "\n".join(lines)
+            "description": "```ansi\n" + "\n".join(lines) + "\n```"
         })
 
     embeds.append({
         "color": 15105570,
         "description": f"😅 **Mención Especial**\n**{last_place['name']}** — {random.choice(FUNNY_PHRASES)}",
         "footer": {
-            "text": f"Actualizado el {datetime.now().strftime('%d/%m/%Y %H:%M')} · Próxima actualización: el lunes que viene",
+            "text": f"Winrate y W/L de los últimos 7 días · Actualizado el {datetime.now().strftime('%d/%m/%Y %H:%M')}",
             "icon_url": TEAM_LOGO_URL
         }
     })
@@ -150,6 +181,9 @@ def main():
         player_info = get_opendota_player_info(steam_id_32) or {}
         winloss_info = get_opendota_winloss(steam_id_32) or {}
         week_info = get_opendota_winloss(steam_id_32, days=7) or {}
+        week_wins = week_info.get('win', 0)
+        week_losses = week_info.get('lose', 0)
+        week_matches = week_wins + week_losses
 
         wins = winloss_info.get('win', 0)
         losses = winloss_info.get('lose', 0)
@@ -166,8 +200,9 @@ def main():
             'losses': losses,
             'total_matches': total_matches,
             'winrate': round(winrate, 1),
-            'week_wins': week_info.get('win', 0),
-            'week_losses': week_info.get('lose', 0),
+            'week_wins': week_wins,
+            'week_losses': week_losses,
+            'week_winrate': round(week_wins / week_matches * 100) if week_matches > 0 else None,
             'rank_tier': rank_tier,
             'leaderboard_rank': leaderboard_rank,
             'steam_id': steam_id_32
